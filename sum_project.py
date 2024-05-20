@@ -123,7 +123,8 @@ def find_sub_source_from_import():
                 find_sub_source_from_import()
         else:
             sub_java_file_path = sub_java_file[0]
-            row_content = list(ROW_CONTENT[len(ROW_CONTENT) - 1])
+            # row_content = list(ROW_CONTENT[len(ROW_CONTENT) - 1])
+            row_content = list(ROW_CONTENT[ROW_CONTENT_INDEX])
             sub_java_file_name = get_str_after_last_dot(sub_java_file_path, "\\")
             row_content.append(sub_java_file_name.split(".")[0] + ".java")
             row_content.append(count_java_code_lines(sub_java_file_path) / 1000)
