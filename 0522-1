@@ -1,0 +1,207 @@
+好的，我们来添加对 `<s:actionmessage>` 标签的处理。在 Struts 中，`<s:actionmessage>` 标签用于显示操作成功的消息。我们可以使用 Thymeleaf 的表达式来显示这些消息。下面是如何在脚本中添加对 `<s:actionmessage>` 标签的处理：
+
+### 更新后的 Python 脚本
+
+```python
+import re
+from bs4 import BeautifulSoup
+
+def read_jsp_file(file_path):
+    with open(file_path, 'r', encoding='utf-8') as file:
+        return file.read()
+
+def write_thymeleaf_file(file_path, content):
+    with open(file_path, 'w', encoding='utf-8') as file:
+        file.write(content)
+
+def replace_jsp_directives(content):
+    content = re.sub(r'<%@\s*page\s+.*?%>', '', content, flags=re.DOTALL)
+    content = re.sub(r'<%@\s*taglib\s+.*?%>', '', content, flags=re.DOTALL)
+    return content
+
+def replace_jsp_expressions(content):
+    content = re.sub(r'<%=(.*?)%>', r'[[${\1}]]', content, flags=re.DOTALL)
+    return content
+
+def replace_jsp_scriptlets(content):
+    content = re.sub(r'<%.*?%>', '', content, flags=re.DOTALL)
+    return content
+
+def replace_common_html_tags(soup):
+    for tag in soup.find_all(['input', 'form', 'select', 'option', 'textarea', 'button']):
+        if 'name' in tag.attrs:
+            tag['th:field'] = '*{' + tag['name'] + '}'
+            del tag['name']
+        if 'action' in tag.attrs:
+            tag['th:action'] = '@{' + tag['action'] + '}'
+            del tag['action']
+        if 'value' in tag.attrs:
+            tag['th:value'] = tag['value']
+            del tag['value']
+
+def replace_struts_tags(soup):
+    for form in soup.find_all('s:form'):
+        form.name = 'form'
+        if 'action' in form.attrs:
+            form['th:action'] = '@{' + form['action'] + '}'
+            del form['action']
+        form['th:object'] = '${commandObject}'
+
+    for textfield in soup.find_all('s:textfield'):
+        textfield.name = 'input'
+        textfield['type'] = 'text'
+        if 'name' in textfield.attrs:
+            textfield['th:field'] = '*{' + textfield['name'] + '}'
+            del textfield['name']
+        if 'label' in textfield.attrs:
+            label = soup.new_tag('label')
+            label.string = textfield['label']
+            textfield.insert_before(label)
+            del textfield['label']
+
+    for password in soup.find_all('s:password'):
+        password.name = 'input'
+        password['type'] = 'password'
+        if 'name' in password.attrs:
+            password['th:field'] = '*{' + password['name'] + '}'
+            del password['name']
+        if 'label' in password.attrs:
+            label = soup.new_tag('label')
+            label.string = password['label']
+            password.insert_before(label)
+            del password['label']
+
+    for submit in soup.find_all('s:submit'):
+        submit.name = 'button'
+        submit['type'] = 'submit'
+        if 'value' in submit.attrs:
+            submit['th:text'] = submit['value']
+            del submit['value']
+
+    for select in soup.find_all('s:select'):
+        select.name = 'select'
+        if 'name' in select.attrs:
+            select['th:field'] = '*{' + select['name'] + '}'
+            del select['name']
+        if 'label' in select.attrs:
+            label = soup.new_tag('label')
+            label.string = select['label']
+            select.insert_before(label)
+            del select['label']
+
+    for option in soup.find_all('s:option'):
+        option.name = 'option'
+        if 'key' in option.attrs:
+            option['th:value'] = '${' + option['key'] + '}'
+            del option['key']
+        if 'value' in option.attrs:
+            option['th:text'] = '${' + option['value'] + '}'
+            del option['value']
+
+    for textarea in soup.find_all('s:textarea'):
+        textarea.name = 'textarea'
+        if 'name' in textarea.attrs:
+            textarea['th:field'] = '*{' + textarea['name'] + '}'
+            del textarea['name']
+
+    for checkbox in soup.find_all('s:checkbox'):
+        checkbox.name = 'input'
+        checkbox['type'] = 'checkbox'
+        if 'name' in checkbox.attrs:
+            checkbox['th:field'] = '*{' + checkbox['name'] + '}'
+            del checkbox['name']
+
+    for radiobutton in soup.find_all('s:radiobutton'):
+        radiobutton.name = 'input'
+        radiobutton['type'] = 'radio'
+        if 'name' in radiobutton.attrs:
+            radiobutton['th:field'] = '*{' + radiobutton['name'] + '}'
+            del radiobutton['name']
+
+    for actionerror in soup.find_all('s:actionerror'):
+        actionerror.name = 'div'
+        actionerror['th:if'] = '${#fields.hasErrors()}'
+        ul = soup.new_tag('ul')
+        li = soup.new_tag('li')
+        li['th:each'] = 'error : ${#fields.errors()}'
+        li['th:text'] = '${error}'
+        ul.append(li)
+        actionerror.append(ul)
+
+    for fielderror in soup.find_all('s:fielderror'):
+        fielderror.name = 'div'
+        fielderror['th:if'] = '${#fields.hasErrors(\'' + fielderror.get('field', '') + '\')}'
+        ul = soup.new_tag('ul')
+        li = soup.new_tag('li')
+        li['th:each'] = 'error : ${#fields.errors(\'' + fielderror.get('field', '') + '\')}'
+        li['th:text'] = '${error}'
+        ul.append(li)
+        fielderror.append(ul)
+
+    for actionmessage in soup.find_all('s:actionmessage'):
+        actionmessage.name = 'div'
+        actionmessage['th:if'] = '${#fields.hasMessages()}'
+        ul = soup.new_tag('ul')
+        li = soup.new_tag('li')
+        li['th:each'] = 'msg : ${#fields.allMessages()}'
+        li['th:text'] = '${msg}'
+        ul.append(li)
+        actionmessage.append(ul)
+
+    for if_tag in soup.find_all('s:if'):
+        if_tag.name = 'div'
+        if 'test' in if_tag.attrs:
+            if_tag['th:if'] = '${' + if_tag['test'] + '}'
+            del if_tag['test']
+
+    for elseif_tag in soup.find_all('s:elseif'):
+        elseif_tag.name = 'div'
+        if 'test' in elseif_tag.attrs:
+            elseif_tag['th:unless'] = '${' + elseif_tag['test'] + '}'
+            del elseif_tag['test']
+
+    for else_tag in soup.find_all('s:else'):
+        else_tag.name = 'div'
+        else_tag['th:if'] = 'not ${condition}'
+
+    for iterator in soup.find_all('s:iterator'):
+        iterator.name = 'div'
+        if 'value' in iterator.attrs:
+            iterator['th:each'] = 'item : ${' + iterator['value'] + '}'
+            del iterator['value']
+        if 'var' in iterator.attrs:
+            iterator['th:each'] = iterator['var'] + ' : ${' + iterator['value'] + '}'
+            del iterator['var']
+
+    return soup
+
+def convert_jsp_to_thymeleaf(jsp_content):
+    content = replace_jsp_directives(jsp_content)
+    content = replace_jsp_expressions(content)
+    content = replace_jsp_scriptlets(content)
+    soup = BeautifulSoup(content, 'html.parser')
+    replace_common_html_tags(soup)
+    soup = replace_struts_tags(soup)
+    return str(soup)
+
+def convert_file(jsp_file_path, thymeleaf_file_path):
+    jsp_content = read_jsp_file(jsp_file_path)
+    thymeleaf_content = convert_jsp_to_thymeleaf(jsp_content)
+    write_thymeleaf_file(thymeleaf_file_path, thymeleaf_content)
+
+# 示例调用
+convert_file('path/to/your/file.jsp', 'path/to/your/output.html')
+```
+
+### 详细说明
+
+1. **添加 `s:actionmessage` 标签处理**：
+    - 查找所有的 `<s:actionmessage>` 标签，并替换为一个 `div` 标签。
+    - 在 `div` 标签中，使用 Thymeleaf 的 `th:if` 属性判断是否有消息。
+    - 创建一个 `ul` 和 `li` 标签，用 `th:each` 遍历消息列表，并用 `th:text` 显示每条消息。
+
+2. **其他处理逻辑**：
+    - 脚本中对其他 Struts 标签的处理逻辑保持不变。
+    - 使用 `BeautifulSoup` 解析和转换 HTML 内容。
+
+通过这个更新的脚本，我们能够更全面地处理 Struts 标签，并将它们转换为相应的 Thymeleaf 语法。可以根据项目的实际需求进一步扩展和优化脚本，以涵盖更多的标签和自定义逻辑。
