@@ -1,0 +1,160 @@
+为了实现尽量全面的 JSP 到 Thymeleaf 的转换，需要处理更多的标签和表达式，并确保所有可能的 JSP 结构都能被替换。以下是一个更全面的 Python 脚本示例，旨在覆盖更广泛的标签和表达式。
+
+### 示例 Python 脚本
+
+```python
+import re
+from bs4 import BeautifulSoup
+
+def read_jsp_file(file_path):
+    with open(file_path, 'r', encoding='utf-8') as file:
+        return file.read()
+
+def write_thymeleaf_file(file_path, content):
+    with open(file_path, 'w', encoding='utf-8') as file:
+        file.write(content)
+
+def replace_jsp_directives(content):
+    # 替换 JSP 指令标签
+    content = re.sub(r'<%@\s*page\s+.*?%>', '', content, flags=re.DOTALL)
+    content = re.sub(r'<%@\s*taglib\s+.*?%>', '', content, flags=re.DOTALL)
+    return content
+
+def replace_jsp_expressions(content):
+    # 替换 JSP 表达式
+    content = re.sub(r'<%=(.*?)%>', r'[[${\1}]]', content, flags=re.DOTALL)
+    return content
+
+def replace_jsp_scriptlets(content):
+    # 替换 JSP 脚本片段
+    content = re.sub(r'<%.*?%>', '', content, flags=re.DOTALL)
+    return content
+
+def replace_common_html_tags(soup):
+    # 替换常见的 HTML 标签及属性
+    for tag in soup.find_all(['input', 'form', 'select', 'option', 'textarea', 'button']):
+        if 'name' in tag.attrs:
+            tag['th:field'] = '*{' + tag['name'] + '}'
+            del tag['name']
+        if 'action' in tag.attrs:
+            tag['th:action'] = '@{' + tag['action'] + '}'
+            del tag['action']
+        if 'value' in tag.attrs:
+            tag['th:value'] = tag['value']
+            del tag['value']
+
+def replace_struts_tags(soup):
+    # 替换 <s:form> 标签
+    for form in soup.find_all('s:form'):
+        form.name = 'form'
+        if 'action' in form.attrs:
+            form['th:action'] = '@{' + form['action'] + '}'
+            del form['action']
+        form['th:object'] = '${commandObject}'  # Example: replace with Thymeleaf object
+
+    # 替换 <s:textfield> 标签
+    for textfield in soup.find_all('s:textfield'):
+        textfield.name = 'input'
+        textfield['type'] = 'text'
+        if 'name' in textfield.attrs:
+            textfield['th:field'] = '*{' + textfield['name'] + '}'
+            del textfield['name']
+        if 'label' in textfield.attrs:
+            label = soup.new_tag('label')
+            label.string = textfield['label']
+            textfield.insert_before(label)
+            del textfield['label']
+
+    # 替换 <s:password> 标签
+    for password in soup.find_all('s:password'):
+        password.name = 'input'
+        password['type'] = 'password'
+        if 'name' in password.attrs:
+            password['th:field'] = '*{' + password['name'] + '}'
+            del password['name']
+        if 'label' in password.attrs:
+            label = soup.new_tag('label')
+            label.string = password['label']
+            password.insert_before(label)
+            del password['label']
+
+    # 替换 <s:submit> 标签
+    for submit in soup.find_all('s:submit'):
+        submit.name = 'button'
+        submit['type'] = 'submit'
+        if 'value' in submit.attrs:
+            submit['th:text'] = submit['value']
+            del submit['value']
+
+    # 替换 <s:select> 标签
+    for select in soup.find_all('s:select'):
+        select.name = 'select'
+        if 'name' in select.attrs:
+            select['th:field'] = '*{' + select['name'] + '}'
+            del select['name']
+        if 'label' in select.attrs:
+            label = soup.new_tag('label')
+            label.string = select['label']
+            select.insert_before(label)
+            del select['label']
+
+    return soup
+
+def convert_jsp_to_thymeleaf(jsp_content):
+    # 替换 JSP 指令
+    content = replace_jsp_directives(jsp_content)
+
+    # 替换 JSP 表达式
+    content = replace_jsp_expressions(content)
+
+    # 替换 JSP 脚本片段
+    content = replace_jsp_scriptlets(content)
+
+    # 解析 HTML 内容
+    soup = BeautifulSoup(content, 'html.parser')
+
+    # 替换常见 HTML 标签
+    replace_common_html_tags(soup)
+
+    # 替换 Struts 标签
+    soup = replace_struts_tags(soup)
+
+    return str(soup)
+
+def convert_file(jsp_file_path, thymeleaf_file_path):
+    jsp_content = read_jsp_file(jsp_file_path)
+    thymeleaf_content = convert_jsp_to_thymeleaf(jsp_content)
+    write_thymeleaf_file(thymeleaf_file_path, thymeleaf_content)
+
+# 示例调用
+convert_file('path/to/your/file.jsp', 'path/to/your/output.html')
+```
+
+### 详细说明
+
+1. **读取和写入文件**：
+    - `read_jsp_file` 函数读取 JSP 文件内容。
+    - `write_thymeleaf_file` 函数将转换后的内容写入 Thymeleaf 文件。
+
+2. **替换 JSP 指令**：
+    - `replace_jsp_directives` 函数移除 JSP 指令标签，如 `<%@ page %>` 和 `<%@ taglib %>`。
+
+3. **替换 JSP 表达式**：
+    - `replace_jsp_expressions` 函数将 JSP 表达式 `<%= ... %>` 替换为 Thymeleaf 表达式 `[[${...}]]`。
+
+4. **替换 JSP 脚本片段**：
+    - `replace_jsp_scriptlets` 函数移除 JSP 脚本片段 `<% ... %>`。
+
+5. **替换常见 HTML 标签及属性**：
+    - `replace_common_html_tags` 函数替换常见 HTML 标签（如 `input`, `form`, `select`, `option`, `textarea`, `button`）的属性为 Thymeleaf 语法。
+
+6. **替换 Struts 标签**：
+    - `replace_struts_tags` 函数使用 `BeautifulSoup` 解析和替换常见的 Struts 标签（如 `<s:form>`, `<s:textfield>`, `<s:password>`, `<s:submit>`, `<s:select>`），为相应的 Thymeleaf 语法。
+
+7. **综合转换**：
+    - `convert_jsp_to_thymeleaf` 函数结合上述所有替换操作，进行完整的转换。
+
+8. **文件转换调用**：
+    - `convert_file` 函数演示了如何调用上述函数，将指定的 JSP 文件转换为 Thymeleaf HTML 文件。
+
+这个示例代码提供了基本且尽量全面的转换功能，可以根据项目需求进一步扩展和优化，处理更多的 JSP 标签和自定义逻辑。
