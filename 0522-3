@@ -1,0 +1,261 @@
+import re
+from bs4 import BeautifulSoup, Tag, NavigableString
+
+def read_jsp_file(file_path):
+    with open(file_path, 'r', encoding='utf-8') as file:
+        return file.read()
+
+def write_thymeleaf_file(file_path, content):
+    with open(file_path, 'w', encoding='utf-8') as file:
+        file.write(content)
+
+def replace_jsp_directives(content):
+    content = re.sub(r'<%@\s*page\s+.*?%>', '', content, flags=re.DOTALL)
+    content = re.sub(r'<%@\s*taglib\s+.*?%>', '', content, flags=re.DOTALL)
+    return content
+
+def replace_jsp_expressions(content):
+    content = re.sub(r'<%=(.*?)%>', r'[[${\1}]]', content, flags=re.DOTALL)
+    return content
+
+def replace_jsp_scriptlets(content):
+    content = re.sub(r'<%.*?%>', '', content, flags=re.DOTALL)
+    return content
+
+def replace_common_html_tags(soup):
+    for tag in soup.find_all(['input', 'form', 'select', 'option', 'textarea', 'button']):
+        if tag.name == 'input' and tag.get('type') == 'button' and 'value' in tag.attrs:
+            tag['value'] = tag['value']
+        else:
+            if 'value' in tag.attrs:
+                if 's:property' in tag['value']:
+                    property_value = re.search(r"value\s*=\s*'(.*?)'", tag['value']).group(1)
+                    tag['th:value'] = f'${{{property_value}}}'
+                    del tag['value']
+                else:
+                    tag['th:value'] = tag['value']
+                    del tag['value']
+        if 'name' in tag.attrs:
+            tag['th:field'] = f'*{{{tag["name"]}}}'
+            del tag['name']
+        if 'action' in tag.attrs:
+            tag['th:action'] = f'@{{{tag["action"]}}}'
+            del tag['action']
+
+def replace_struts_tags(soup):
+    # Handle s:form
+    for form in soup.find_all('s:form'):
+        form.name = 'form'
+        if 'action' in form.attrs:
+            form['th:action'] = f'@{{{form["action"]}}}'
+            del form['action']
+        form['th:object'] = '${commandObject}'
+
+    # Handle s:textfield
+    for textfield in soup.find_all('s:textfield'):
+        textfield.name = 'input'
+        textfield['type'] = 'text'
+        if 'name' in textfield.attrs:
+            textfield['th:field'] = f'*{{{textfield["name"]}}}'
+            del textfield['name']
+        if 'label' in textfield.attrs:
+            label = soup.new_tag('label')
+            label.string = textfield['label']
+            textfield.insert_before(label)
+            del textfield['label']
+
+    # Handle s:password
+    for password in soup.find_all('s:password'):
+        password.name = 'input'
+        password['type'] = 'password'
+        if 'name' in password.attrs:
+            password['th:field'] = f'*{{{password["name"]}}}'
+            del password['name']
+        if 'label' in password.attrs:
+            label = soup.new_tag('label')
+            label.string = password['label']
+            password.insert_before(label)
+            del password['label']
+
+    # Handle s:submit
+    for submit in soup.find_all('s:submit'):
+        submit.name = 'button'
+        submit['type'] = 'submit'
+        if 'value' in submit.attrs:
+            submit['th:text'] = submit['value']
+            del submit['value']
+
+    # Handle s:select
+    for select in soup.find_all('s:select'):
+        select.name = 'select'
+        if 'name' in select.attrs:
+            select['th:field'] = f'*{{{select["name"]}}}'
+            del select['name']
+        if 'label' in select.attrs:
+            label = soup.new_tag('label')
+            label.string = select['label']
+            select.insert_before(label)
+            del select['label']
+
+    # Handle s:option
+    for option in soup.find_all('s:option'):
+        option.name = 'option'
+        if 'key' in option.attrs:
+            option['th:value'] = f'${{{option["key"]}}}'
+            del option['key']
+        if 'value' in option.attrs:
+            option['th:text'] = f'${{{option["value"]}}}'
+            del option['value']
+
+    # Handle s:textarea
+    for textarea in soup.find_all('s:textarea'):
+        textarea.name = 'textarea'
+        if 'name' in textarea.attrs:
+            textarea['th:field'] = f'*{{{textarea["name"]}}}'
+            del textarea['name']
+
+    # Handle s:checkbox
+    for checkbox in soup.find_all('s:checkbox'):
+        checkbox.name = 'input'
+        checkbox['type'] = 'checkbox'
+        if 'name' in checkbox.attrs:
+            checkbox['th:field'] = f'*{{{checkbox["name"]}}}'
+            del checkbox['name']
+
+    # Handle s:radiobutton
+    for radiobutton in soup.find_all('s:radiobutton'):
+        radiobutton.name = 'input'
+        radiobutton['type'] = 'radio'
+        if 'name' in radiobutton.attrs:
+            radiobutton['th:field'] = f'*{{{radiobutton["name"]}}}'
+            del radiobutton['name']
+
+    # Handle s:actionerror
+    for actionerror in soup.find_all('s:actionerror'):
+        actionerror.name = 'div'
+        actionerror['th:if'] = '${#fields.hasErrors()}'
+        ul = soup.new_tag('ul')
+        li = soup.new_tag('li')
+        li['th:each'] = 'error : ${#fields.errors()}'
+        li['th:text'] = '${error}'
+        ul.append(li)
+        actionerror.append(ul)
+
+    # Handle s:fielderror
+    for fielderror in soup.find_all('s:fielderror'):
+        fielderror.name = 'div'
+        fielderror['th:if'] = f'${{#fields.hasErrors(\'{fielderror.get("field", "")}\')}}'
+        ul = soup.new_tag('ul')
+        li = soup.new_tag('li')
+        li['th:each'] = f'error : ${{#fields.errors(\'{fielderror.get("field", "")}\')}}'
+        li['th:text'] = '${error}'
+        ul.append(li)
+        fielderror.append(ul)
+
+    # Handle s:actionmessage
+    for actionmessage in soup.find_all('s:actionmessage'):
+        actionmessage.name = 'div'
+        actionmessage['th:if'] = '${#fields.hasMessages()}'
+        ul = soup.new_tag('ul')
+        li = soup.new_tag('li')
+        li['th:each'] = 'msg : ${#fields.allMessages()}'
+        li['th:text'] = '${msg}'
+        ul.append(li)
+        actionmessage.append(ul)
+
+    # Handle sj:div
+    for div in soup.find_all('sj:div'):
+        div.name = 'div'
+        if 'href' in div.attrs:
+            div['th:href'] = div['href']
+            del div['href']
+    
+    # Handle s:hidden
+    for hidden in soup.find_all('s:hidden'):
+        hidden.name = 'input'
+        hidden['type'] = 'hidden'
+        if 'name' in hidden.attrs:
+            hidden['th:field'] = f'*{{{hidden["name"]}}}'
+            del hidden['name']
+    
+    # Handle s:div
+    for div in soup.find_all('s:div'):
+        div.name = 'div'
+        if 'theme' in div.attrs:
+            del div['theme']
+    
+    # Handle s:property
+    for prop in soup.find_all('s:property'):
+        span = soup.new_tag('span')
+        span['th:text'] = f'${{{prop.get("value", "")}}}'
+        prop.insert_before(span)
+        prop.decompose()
+    
+    # Handle s:token
+    for token in soup.find_all('s:token'):
+        input_tag = soup.new_tag('input')
+        input_tag['type'] = 'hidden'
+        input_tag['th:name'] = '${_csrf.parameterName}'
+        input_tag['th:value'] = '${_csrf.token}'
+        token.insert_before(input_tag)
+        token.decompose()
+    
+    # Handle s:set
+    for set_tag in soup.find_all('s:set'):
+        th_attr = f'${{{set_tag["name"]}={set_tag["value"]}}}'
+        set_tag.insert_before(BeautifulSoup(f'<div th:with="{th_attr}"></div>', 'html.parser'))
+        set_tag.decompose()
+
+    # Handle s:checkboxlist
+    for checkboxlist in soup.find_all('s:checkboxlist'):
+        checkboxlist.name = 'div'
+        field = checkboxlist.get('name')
+        for item in checkboxlist.find_all('s:checkbox'):
+            checkbox = soup.new_tag('input')
+            checkbox['type'] = 'checkbox'
+            checkbox['th:field'] = f'*{{{field}}}'
+            checkbox['th:value'] = f'${{{item.get("value")}}}'
+            checkboxlist.insert_before(checkbox)
+            label = soup.new_tag('label')
+            label['th:for'] = checkbox['id']
+            label.string = item.get('label', '')
+            checkboxlist.insert_before(label)
+        checkboxlist.decompose()
+    
+    # Handle s:if
+    for if_tag in soup.find_all('s:if'):
+        if_tag.name = 'div'
+        if_tag['th:if'] = f'${{{if_tag["test"]}}}'
+        del if_tag['test']
+    
+    # Handle s:else
+    for else_tag in soup.find_all('s:else'):
+        else_tag.name = 'div'
+        else_tag['th:unless'] = else_tag.find_previous_sibling().get('th:if')
+        else_tag.find_previous_sibling()['th:if'] += ' == false'
+        else_tag.decompose()
+        else_tag.insert_after(else_tag)
+
+def prettify_html(content):
+    soup = BeautifulSoup(content, 'html.parser')
+    return soup.prettify()
+
+def convert_jsp_to_thymeleaf(jsp_content):
+    content = replace_jsp_directives(jsp_content)
+    content = replace_jsp_expressions(content)
+    content = replace_jsp_scriptlets(content)
+    
+    soup = BeautifulSoup(content, 'html.parser')
+    
+    replace_common_html_tags(soup)
+    replace_struts_tags(soup)
+    
+    return prettify_html(str(soup))
+
+# Example usage
+jsp_content = read_jsp_file('your_jsp_file.jsp')
+thymeleaf_content = convert_jsp_to_thymeleaf(jsp_content)
+write_thymeleaf_file('output.html', thymeleaf_content)
+```
+
+这个脚本增加了对 `s:checkboxlist`、`s:if` 和 `s:else` 标签的处理逻辑。通过这些更新，脚本现在应能够处理这些标签并将它们正确转换为 Thymeleaf 语法。
