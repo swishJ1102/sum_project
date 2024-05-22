@@ -36,8 +36,13 @@ def replace_common_html_tags(soup):
             tag['th:action'] = '@{' + tag['action'] + '}'
             del tag['action']
         if 'value' in tag.attrs:
-            tag['th:value'] = tag['value']
-            del tag['value']
+    if 's:property' in tag['value']:
+        property_value = re.search(r'value\s*=\s*\'(.*?)\'', tag['value']).group(1)
+        tag['th:value'] = '{{' + property_value + '}}'
+        del tag['value']
+    else:
+        tag['th:value'] = tag['value']
+        del tag['value']
 
 def replace_struts_tags(soup):
     for form in soup.find_all('s:form'):
